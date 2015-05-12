@@ -3,8 +3,6 @@ source('dataprep.R')
 unique(dat[, c("Police.Service", "muniName", "Population.2011")])
 
 
-
-
 xtabs(~cut(Total.Cases, breaks=c(-1,0,1,2,5,10,20,50,100)) + Year, data=dat)
 
 ## Toronto Police Service ####
@@ -84,52 +82,4 @@ dat.win[,3:11] <- dat.win[,3:11]/2.2
 plot(Total.Cases ~ Year, data=dat.win)
 fit <- lm(Total.Cases ~ Year, data=dat.win)
 summary(fit)
-
-
-
-
-
-
-
-wikiSummary <- html("http://en.wikipedia.org/wiki/Ontario_Provincial_Police")
-nodeSet <- getNodeSet(wikiSummary,"//ul/li/a")
-
-data.frame(place=xmlSApply(nodeSet[1:197], xmlValue), 
-           link=paste("http://en.wikipedia.org", xmlSApply(nodeSet[1:197], function(x) xmlGetAttr(x, "href")), sep=""))
-
-
-
-xpathApply(wikiSummary, "//a[@href]", xmlGetAttr, "href")
-
-nodeSet[1:100]
-
-wikiSummary <- html("http://en.wikipedia.org/wiki/Leamington,_Ontario")
-wikiSummary <- html("http://en.wikipedia.org/wiki/Greenstone,_Ontario")
-wikiSummary <- html("http://en.wikipedia.org/wiki/Marathon,_Ontario")
-wikiSummary <- html("http://en.wikipedia.org/wiki/Mattawa,_Ontario")
-
-nodeSet <- getNodeSet(wikiSummary,"//table[@class='infobox geography vcard']/tr")
-
-xmlSApply(nodeSet, xmlValue)[1] %>% gsub("\\n", "", .)
-
-xmlSApply(nodeSet, xmlValue) %>% .[grep("Total",.)] %>% 
-  substr(., regexpr("\\n", .), nchar(.)) %>%
-  gsub("\\n", "", .)
-
-xmlSApply(nodeSet, xmlValue) %>% .[grep("Municipality.*lower.*\\n.",.)] %>%
- substr(., regexpr("\\n", .), nchar(.)) %>%
-  gsub("\\n", "", .)
-
-xmlSApply(nodeSet, xmlValue) %>% .[grep("Density",.)] %>%
-  substr(., regexpr("\\n", .), regexpr("..km", .)) %>%
-  gsub("\\n", "", .)
-  
-
-
-   
-  
-
-
-wikiSummary <- html("http://en.wikipedia.org/wiki/Leamington,_Ontario")
-
 

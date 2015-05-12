@@ -102,7 +102,7 @@ towns <- head(towns, -1)
 munis <- merge(cities, towns, by=names(cities)[c(1:2, 4:8)], all=T)
 head(munis)
 
-nameMatch <- lapply(munis$Name, function(x) agrep(x, dat$Police.Service))
+nameMatch <- lapply(munis$Name, function(x) grep(x, dat$Police.Service))
 
 readkey <- function()
 {
@@ -129,9 +129,94 @@ for(i in 1:length(nameMatch)){
 }
 
 # Hamilton matches to Hamilton and Milton. Change it back to Hamilton.
-dat$muniName[nameMatch[[51]]] <- munis$Name[51]
-dat$Population.2006[nameMatch[[51]]] <- munis$Population.2006[51]
-dat$Population.2011[nameMatch[[51]]]] <- munis$Population.2011[51]
+# dat$muniName[nameMatch[[51]]] <- munis$Name[51]
+# dat$Population.2006[nameMatch[[51]]] <- munis$Population.2006[51]
+# dat$Population.2011[nameMatch[[51]]] <- munis$Population.2011[51]
+
+write.csv(dat, "dat1.csv", row.names=F)
+
+## PART II ####
+dat <- read.csv("dat1.csv", stringsAsFactors = F)
+
+## Assessing Municipality Matching So Far  ####
+
+# All unique rows
+dat %>% select(., Police.Service, muniName, Population.2006, Population.2011, Pop.density) %>%
+  unique
+
+# All unmatched Police.Services
+dat %>% select(., Police.Service, muniName, Population.2006, Population.2011, Pop.density) %>%
+  subset(., is.na(muniName)) %>%
+  unique
+
+# Note: Most unmatched are OPP. Scrape the OPP Wiki page (http://en.wikipedia.org/wiki/Ontario_Provincial_Police)
+# by going to each link under "Detachments" and downloading population & pop density if available
+
+oppSummary <- html("http://en.wikipedia.org/wiki/Ontario_Provincial_Police")
+nodeSet <- getNodeSet(oppSummary,"//ul/li/a")
+
+scrapeWiki <- data.frame(place=xmlSApply(nodeSet[28:197], xmlValue), 
+                         link=paste("http://en.wikipedia.org", xmlSApply(nodeSet[28:197], function(x) xmlGetAttr(x, "href")), sep=""))
+
+scrapeWiki$muniName <- NA
+scrapeWiki$Population.2011 <- NA
+scrapeWiki$Pop.density <- NA
+
+for( i in 1:nrow(scrapeWiki)){
+  wikiSummary <- tryCatch(html(as.character(scrapeWiki$link[i])), error = function(e) NA)
+  nodeSet <- tryCatch(getNodeSet(wikiSummary,"//table[@class='infobox geography vcard']/tr"), error = function(e) NA)
+  print(i)
+  if(!is.null(nodeSet) && !is.na(nodeSet)){
+    popIndex <- xmlSApply(nodeSet, xmlValue) %>% grep("Population",.)
+    scrapeWiki$muniName[i] <- xmlSApply(nodeSet, xmlValue)[1] %>% gsub("\n", "", .)
+    if(length(popIndex)>0) {
+      # print(xmlSApply(nodeSet, xmlValue)[(popIndex+1)])
+      xmlSApply(nodeSet, xmlValue)[popIndex+1] %>%
+        gsub("\\([^)]*\\)", "", .) %>%
+        gsub("^[^\n]*\n([^\n]*)\n.*$", "\\1", .) -> scrapeWiki$Population.2011[i]
+      
+      # print(xmlSApply(nodeSet, xmlValue)[(popIndex+2)])
+      xmlSApply(nodeSet, xmlValue)[popIndex+2] %>%
+        substr(., regexpr("\\n", .), regexpr("..km", .)) %>%
+        gsub("\\n", "", .) -> scrapeWiki$Pop.density[i]
+      # print(scrapeWiki[i,])
+    }
+  }
+}
+
+nameMatch <- lapply(scrapeWiki$place, function(x) grep(x, dat$Police.Service))
+
+for(i in 1:length(nameMatch)){
+#   print(scrapeWiki$place[i])
+  if(length(nameMatch[[i]])){
+    # If the population hasn't already been filled in (I like this scrape a little less)    
+     if(dat$Population.2011[nameMatch[[i]]] %>% is.na %>% sum != 0){
+       dat$muniName[nameMatch[[i]]] <- scrapeWiki$muniName[i]
+       dat$Population.2011[nameMatch[[i]]] <- scrapeWiki$Population.2011[i]
+       dat$Pop.density[nameMatch[[i]]] <- scrapeWiki$Pop.density[i]
+     }
+     print(dat[nameMatch[[i]],c("Police.Service", "Total.Cases", "muniName", "Population.2011")])
+  }
+}
+
+## Assessing Municipality Matching So Far  ####
+
+# All unique rows
+dat %>% select(., Police.Service, muniName, Population.2006, Population.2011, Pop.density) %>%
+  unique
+
+# All unmatched Police.Services
+dat %>% select(., Police.Service, muniName, Population.2006, Population.2011, Pop.density) %>%
+  subset(., is.na(muniName)) %>%
+  unique
+
+write.csv(dat, "dat2.csv", row.names=F)
+
+## PART II ####
+dat <- read.csv("dat2.csv", stringsAsFactors = F)
+
+## PART III ####
+# For the rest we'll do it the hard way
 
 pop <- function(dat, Police.Service, muniName, pop2006, pop2011, area=NA){
   dat$muniName[dat$Police.Service==Police.Service] <- muniName
@@ -146,55 +231,18 @@ pop <- function(dat, Police.Service, muniName, pop2006, pop2011, area=NA){
   return(dat)
 }
 
-dat <- pop(dat, "Chatham-Kent Police Service", "Chatham-Kent", "103,671", "108,177", 2458.09 )
+dat <- pop(dat, "Peel Regional Police Service", "Peel Region", "1,296,814", "1,296,814", 1246.89)
 dat <- pop(dat, "Durham Regional Police Service", "Durham Region", "589,850", "589,850", 2523.62)
 dat <- pop(dat, "Halton Regional Police Service", "Halton Region", "514,000", "514,000", 967)
-dat <- pop(dat, "Leamington Police Service", "Leamington", "28,275", "28,403",261.92)
+dat <- pop(dat, "York Regional Police Service", "York Region", "892,712", "1,032,524", 1762.17)
+
 dat <- pop(dat, "Michipicoten Township Police Service", "Wawa", "3,204", "2,975", 417.78)
-dat <- pop(dat, "Niagara Regional Police Service", "Niagara Region", "427,421", "431,346", 1854.25)
 dat <- pop(dat, "OPP Grenville County Detachment", "Leeds and Grenville", "96,606", "99,206", 3383.92)
-dat <- pop(dat, "OPP Alexandria Detachment", "North Glengarry", "10,635", "10,251", 643.69)
-dat <- pop(dat, "OPP Almaguin Highlands Detachment", "Burk's Falls", "967", "967", 3.12)
-dat <- pop(dat, "OPP Almaguin Highlands Detachment", "North Kawartha", "2342", "2,289", 776.04)
-dat <- pop(dat, "OPP Armstrong Detachment", "Armstrong", "1,216", "1,216", 90.33)
+dat <- pop(dat, "Niagara Regional Police Service", "Niagara Region", "427,421", "431,346", 1854.25)
 dat <- pop(dat, "OPP Bala Detachment", "Bala", "1,216", "1,216", 90.33)
-dat <- pop(dat, "OPP Dutton Detachment", "Dutton/Dunwich", "3821", "3,876", 294.64)
-dat <- pop(dat, "OPP Ear Falls Detachment", "Ear Falls", "1153", "1026", 331.03)
-dat <- pop(dat, "OPP Chatham-Kent Detachment", "Chatham-Kent", "103,671", "108,177", 2458.09)
-dat <- pop(dat, "OPP Elgin County Detachment", "Elgin County", "49,241", "49,556", 1880.90)
-dat <- pop(dat, "OPP Elgin County Detachment", "Elgin County", "49,241", "49,556", 1880.90)
 dat <- pop(dat, "OPP Elgin Detachment", "Elgin County", "49,241", "49,556", 1880.90)
-dat <- pop(dat, "OPP Elk Lake Detachment", "James", "414", "424", 86.19)
-dat <- pop(dat, "OPP Emo Detachment", "Emo", "1305", "1252", 203.54)
-dat <- pop(dat, "OPP Exeter Detachment", "Emo", "4,785", "4,785", 5.33)
-dat <- pop(dat, "OPP Foleyet Detachment", "Foleyet", "193", "193", 11.92)
-dat <- pop(dat, "OPP Frontenac Detachment", "Frontenac County", "143,865", "149,738", 3787.79)
-dat <- pop(dat, "OPP Gogama Detachment", "Gogama", "394", "394")
-dat <- pop(dat, "OPP Gore Bay Detachment", "Gore Bay", "924", "850", 5.27)
-dat <- pop(dat, "OPP Gore Bay Detachment", "Gore Bay", "924", "850", 5.27)
+dat <- pop(dat, "West Grey Police Service", "West Grey", "12,193", "12,286", 876.02)
 
+## GOOD ENOUGH! ####
 
-
-
-# ## Check Unmathched Municipalities
-# "Bradford West Gwillimbury"
-# "Brampton"
-# "Kitchener"
-# "Niagara Falls"
-# "Newmarket"
-# "Oakville"
-# "Pickering"
-# "Richmond Hill"
-# "St. Catharines"
-# 
-# ## Mismatched municipalities
-# "Brant" -> Brantford Police Service
-# "Erin" -> OPP Dufferin Detachment
-# "Erin" -> OPP Prince Edward Detachment
-# 
-# "Milton" -> Hamilton Police Service
-# "Milton" -> OPP Hamilton Detachment
-# 
-# "Mono" -> OPP Moosonee Detachment
-
-write.csv(dat, "test.csv", row.names=F)
+write.csv(dat, "datFinal.csv", row.names=F)
